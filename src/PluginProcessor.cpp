@@ -86,15 +86,13 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 //==============================================================================
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
-    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    this->currentSampleRate = sampleRate;
+    updateAngleDelta();
 }
 
 void AudioPluginAudioProcessor::releaseResources()
 {
-    // When playback stops, you can use this as an opportunity to free up any
-    // spare memory, etc.
+
 }
 
 bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -121,35 +119,43 @@ bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layou
   #endif
 }
 
-void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
-                                              juce::MidiBuffer& midiMessages)
+void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    juce::ignoreUnused (midiMessages);
+    auto* leftBuffer = buffer.getWritePointer(0);
+    auto* rightBuffer = buffer.getWritePointer(1);
 
-    juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    const auto localTargetFrequency = m_targetFrequency;
+    const auto localTargetVolume = m_targetVolume;
 
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
-
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    if(!juce::approximatelyEqual(localTargetFrequency, m_currentFrequency) || !juce::approximatelyEqual(localTargetVolume, m_currentVolume))
     {
-        auto* channelData = buffer.getWritePointer (channel);
-        juce::ignoreUnused (channelData);
-        // ..do something to the data...
+        const auto frequencyIncrement = (localTargetFrequency - m_currentFrequency) / buffer.getNumSamples();
+        const auto volumeIncrement = (localTargetVolume - m_currentVolume) / buffer.getNumSamples();
+
+        for(int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            const auto currentSample = static_cast<float>(std::sin(currentAngle) * m_currentVolume);
+
+            m_currentFrequency += frequencyIncrement;
+            updateAngleDelta();
+            currentAngle += angleDelta;
+
+            m_currentVolume += volumeIncrement;
+
+            leftBuffer[sample] = currentSample;
+            rightBuffer[sample] = currentSample;
+        }
+    }
+    else
+    {
+        for(int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            const auto currentSample = static_cast<float>(std::sin(currentAngle) * m_currentVolume);
+            currentAngle += angleDelta;
+
+            leftBuffer[sample] = currentSample;
+            rightBuffer[sample] = currentSample;
+        }
     }
 }
 
@@ -178,6 +184,22 @@ void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeI
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
     juce::ignoreUnused (data, sizeInBytes);
+}
+
+void AudioPluginAudioProcessor::setFrequency(const double _frequency)
+{
+    m_targetFrequency = _frequency;
+}
+
+void AudioPluginAudioProcessor::setVolume(const double _volume)
+{
+    m_targetVolume = _volume;
+}
+
+void AudioPluginAudioProcessor::updateAngleDelta()
+{
+    const auto cyclesPerSample = m_currentFrequency / currentSampleRate;
+    angleDelta = cyclesPerSample * 2.0 * juce::MathConstants<double>::pi;
 }
 
 //==============================================================================

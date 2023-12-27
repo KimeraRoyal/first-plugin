@@ -42,7 +42,17 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    //==============================================================================
+    void setFrequency(double _frequency);
+    void setVolume(double _volume);
 private:
     //==============================================================================
+    double m_currentFrequency = 500.0, m_targetFrequency = 500.0;
+    double currentSampleRate = 0.0, currentAngle = 0.0, angleDelta = 0.0;
+
+    double m_currentVolume = 0.125f, m_targetVolume = 0.125f;
+
+    void updateAngleDelta();
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };
